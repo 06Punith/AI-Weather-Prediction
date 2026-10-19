@@ -1,29 +1,133 @@
 # Aether AI Weather Prediction System — Backend
 
-Production-grade Python backend and machine learning pipeline for the **Aether AI Weather Prediction System**.
-
-Powered by:
-- **FastAPI** for high-throughput, asynchronous REST APIs
-- **MongoDB** (PyMongo & Motor) for time-series meteorological storage with automatic embedded fallback
-- **XGBoost & Scikit-learn** for gradient boosted weather regression and calibrated rain probability estimation
-- **PyTorch** for bidirectional LSTM sequence forecasting (48 hours history $\to$ 24 hours future trajectory)
-- **Open-Meteo Integration** for real global observations and archived meteorological records
-- **APScheduler** for automated background pipelines (hourly ingestion, daily forecasting, weekly retraining, periodic evaluation)
+Production-grade Python backend, asynchronous REST APIs, and Machine Learning sequence forecasting pipeline for the **Aether AI Weather Prediction System**.
 
 ---
 
-## 1. Architecture Overview
+## 1. Backend Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   EXTERNAL DATA SOURCES & TELEMETRY                                     │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+         │                                       │                                         │
+         ▼                                       ▼                                         ▼
+┌─────────────────────────┐           ┌─────────────────────────┐               ┌─────────────────────────┐
+│     WeatherAPI.com      │           │     OpenWeatherMap      │               │     Open-Meteo API      │
+│  • Google 1:1 precision │           │  • Global Station Feed  │               │  • Real-time telemetry  │
+│  • Physical WMO/METAR   │           │  • Free Tier with Key   │               │  • Historical archive   │
+│    airport stations     │           └────────────┬────────────┘               │  • Worldwide geocoding  │
+└────────────┬────────────┘                        │                            └────────────┬────────────┘
+             │                                     │                                         │
+             └─────────────────────────────────────┼─────────────────────────────────────────┘
+                                                   │
+                                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                     INGESTION & SERVICE LAYER                                           │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  • `OpenMeteoService`: HTTPX asynchronous client with retries, timeout management & geocoding            │
+│  • `WeatherIngestionService`: UTC normalization, sensor sanitization, deduplication & database upsert   │
+│  • `ForecastService`: Orchestrates live observations, ML sequence generation & calibrated bounds        │
+│  • `EvaluationService`: Computes empirical error tracking (MAE, RMSE, R², F1-Score, Brier score)        │
+└────────────────────────────────────────┬────────────────────────────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                      MACHINE LEARNING PIPELINE                                          │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Feature Engineering (`ml/features.py`)                                                                 │
+│  ├── Cyclical time encodings: sin(2π·hour/24), cos(2π·hour/24), sin(2π·doy/365)                         │
+│  ├── Atmospheric dynamics: diurnal solar wave, 3h & 6h barometric pressure trends (ΔP/Δt)               │
+│  ├── Lag features: t-1h, t-2h, t-3h, t-6h, t-12h, t-24h for temperature, humidity, wind & rain         │
+│  └── Rolling statistics: 6h, 12h, 24h rolling mean, std dev, min, and max                               │
+│                                                                                                         │
+│  Model Zoo (`ml/`)                                                                                      │
+│  ├── Baselines (`ml/baselines.py`): Persistence model & L2-regularized Ridge regression                │
+│  ├── Gradient Boosted Trees (`ml/xgboost_model.py`): XGBoost multi-output regression & rain classifier  │
+│  └── Deep Sequence Network (`ml/lstm_model.py`): PyTorch Bidirectional LSTM (48h history ➔ 24h future)  │
+│                                                                                                         │
+│  Inference & Calibration (`ml/predict.py`)                                                              │
+│  └── Dynamic uncertainty envelope: ±0.4°C at t+1h widening to ±1.2°C at t+24h                           │
+└────────────────────────────────────────┬────────────────────────────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                      PERSISTENCE & STORAGE LAYER                                        │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Primary: MongoDB (Async Motor & PyMongo)                                                               │
+│  ├── `locations`: Tracked catalog & coordinate metadata                                                 │
+│  ├── `observations`: Time-series meteorological records with compound indexes (`location_id`, `ts`)   │
+│  ├── `forecasts`: Generated 24h sequence runs & calibrated 7-day outlooks                               │
+│  └── `model_runs`: Model artifact registry, benchmark metrics & training runs                           │
+│                                                                                                         │
+│  Fallback: Embedded Local Storage Engine (`db/mongodb.py`)                                              │
+│  └── Zero-config in-memory document store with automatic disk snapshots to `artifacts/storage/`        │
+└────────────────────────────────────────┬────────────────────────────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   AUTOMATED BACKGROUND SCHEDULER                                        │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  APScheduler (`jobs/scheduler.py` & `jobs/tasks.py`)                                                    │
+│  ├── Hourly (min=5): Ingest latest ground observations across all tracked locations                     │
+│  ├── Daily (00:15 UTC): Generate 24h & 7d forecasts and persist to database                             │
+│  ├── Weekly (Sunday 02:00 UTC): Retrain XGBoost & LSTM on accumulated telemetry                         │
+│  └── Periodic (every 6h): Verify forecasts vs actual readings to update empirical accuracy curves       │
+└────────────────────────────────────────┬────────────────────────────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                     FASTAPI ASYNCHRONOUS REST API                                       │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Routes:                                                                                                │
+│  ├── `/health`, `/health/ready`                ➔ Liveness & MongoDB connectivity health probes         │
+│  ├── `/api/v1/locations`, `/search`           ➔ Active station catalog & global geocoding search      │
+│  ├── `/api/v1/weather/current`, `/history`     ➔ Real-time observation & actual-vs-predicted points     │
+│  ├── `/api/v1/forecast`, `/hourly`, `/daily`   ➔ 24h hourly sequence with confidence & 7d outlook      │
+│  ├── `/api/v1/models/metrics`, `/status`       ➔ Benchmark comparisons & feature importances           │
+│  └── `/api/v1/admin/*`                         ➔ Protected endpoints to trigger ingest/train/forecast  │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Machine Learning Architecture
+
+### Feature Engineering (`app/ml/features.py`)
+From each raw meteorological observation stream $(T, RH, P, W, R)$, the system computes **28+ predictive features**:
+1. **Solar & Cyclical Time**:
+   $$\sin\left(\frac{2\pi \cdot \text{hour}}{24}\right), \quad \cos\left(\frac{2\pi \cdot \text{hour}}{24}\right), \quad \sin\left(\frac{2\pi \cdot \text{day\_of\_year}}{365}\right)$$
+2. **Barometric Pressure Trend**:
+   $$\Delta P_{3h} = P_t - P_{t-3}, \quad \Delta P_{6h} = P_t - P_{t-6}$$
+   Classifies barometric tendencies into `rising`, `steady`, or `falling`.
+3. **Temporal Lag Vectors**:
+   $$X_{\text{lags}} \in \{t-1, t-2, t-3, t-6, t-12, t-24\}$$
+4. **Rolling Statistics**:
+   Moving averages and standard deviations over 6h, 12h, and 24h windows to capture air mass transitions.
+
+### Model Hierarchy
+| Model | Target Variables | Loss Function | Role |
+| :--- | :--- | :--- | :--- |
+| **Persistence Baseline** | $T, RH, W, R$ | MAE | Strict benchmark representing $X_{t+h} = X_t$ |
+| **Ridge Regression** | $T, RH, W, R$ | MSE with L2 regularization | Linear benchmark capturing baseline diurnal trend |
+| **XGBoost Regressor** | $T, RH, W, \text{RainProb}$ | Squared Error & Log-Loss | Multi-output gradient boosted trees with early stopping |
+| **PyTorch Bi-LSTM** | 24-step sequence | Sequence MSE Loss | Recurrent neural net capturing 48h temporal dependencies |
+| **Ensemble (Prod)** | Blended Output | Calibrated Ensemble | Weighted prediction anchored to live station readings |
+
+---
+
+## 3. Directory Layout
 
 ```
 backend/
 ├── app/
 │   ├── main.py                   # FastAPI application & lifespan management
 │   ├── core/
-│   │   ├── config.py             # Pydantic BaseSettings & environment loader
+│   │   ├── config.py             # Pydantic BaseSettings & environment variables
 │   │   ├── logging.py            # Sanitized structured logging
-│   │   └── security.py           # Admin API key authentication & error handlers
+│   │   └── security.py           # Admin API key authentication & exception handlers
 │   ├── db/
-│   │   ├── mongodb.py            # MongoDB connection & local embedded storage fallback
+│   │   ├── mongodb.py            # MongoDB Motor connection & embedded JSON fallback
 │   │   └── indexes.py            # Compound unique & lookup indexes
 │   ├── models/
 │   │   └── schemas.py            # Pydantic v2 schemas for all payloads
@@ -46,11 +150,11 @@ backend/
 │   │   ├── lstm_model.py         # PyTorch LSTM 48h sequence network
 │   │   ├── evaluate.py           # MAE, RMSE, R², F1, ROC-AUC, Brier score
 │   │   ├── train.py              # Reproducible chronological training pipeline
-│   │   └── predict.py            # Multi-model inference engine
+│   │   └── predict.py            # Multi-model sequence inference engine
 │   ├── jobs/
 │   │   ├── scheduler.py          # APScheduler configuration
 │   │   └── tasks.py              # Hourly, daily, and weekly automated jobs
-│   └── tests/                    # 19 comprehensive automated pytest test suites
+│   └── tests/                    # Comprehensive automated pytest test suites
 ├── scripts/
 │   ├── ingest_history.py         # CLI historical ingestion script
 │   ├── train_models.py           # CLI model training script
@@ -58,200 +162,126 @@ backend/
 ├── artifacts/
 │   ├── models/                   # Saved XGBoost (.joblib) & PyTorch (.pt) weights
 │   └── storage/                  # Local embedded database snapshot
-├── .env.example
-├── requirements.txt
-└── README.md
+├── .env.example                  # Environment configuration template
+├── requirements.txt              # Production Python dependencies
+└── README.md                     # Backend documentation
 ```
 
 ---
 
-## 2. Setup & Installation
+## 4. Setup & Installation
 
 ### Prerequisites
-- Python 3.11+
-- (Optional) MongoDB 6.0+ or MongoDB Atlas cluster (a persistent embedded document store runs automatically if MongoDB is not locally active).
+- Python 3.11 or higher
+- Optional: MongoDB 6.0+ or MongoDB Atlas (embedded persistence runs automatically if MongoDB is not present).
 
-### Step-by-Step Installation
+### Installation Steps
 
 ```bash
-# 1. Clone and enter backend directory
+# 1. Navigate to backend directory
 cd backend
 
-# 2. Create and activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# 2. Create and activate a Python virtual environment
+python -m venv .venv
+source .venv/bin/activate    # On Windows: .venv\Scripts\activate
 
-# 3. Install dependencies
+# 3. Install required packages
 pip install -r requirements.txt
 
-# 4. Configure environment variables
+# 4. Copy environment configuration
 cp .env.example .env
 ```
 
 ---
 
-## 3. Database Configuration
+## 5. Environment Variables Configuration
 
-The backend natively supports both **MongoDB Atlas** (cloud cluster), **local MongoDB**, and an **embedded fallback engine**:
+In `backend/.env`:
 
-### Using MongoDB Atlas
-Set the connection string in your `.env` file:
 ```ini
-MONGODB_URI="mongodb+srv://<username>:<password>@cluster0.mongodb.net/?retryWrites=true&w=majority"
-MONGODB_DB_NAME="weather_prediction"
-```
+PROJECT_NAME="Aether AI Weather Prediction System"
+VERSION="1.0.0"
+ENV="development"
+DEBUG=True
 
-### Using Local MongoDB
-```ini
+# Network and Server
+HOST="0.0.0.0"
+PORT=8000
+API_V1_PREFIX="/api/v1"
+ALLOWED_ORIGINS="http://localhost:5173,http://localhost:3000"
+
+# Database Configuration (Leave default for embedded zero-config mode)
 MONGODB_URI="mongodb://localhost:27017"
 MONGODB_DB_NAME="weather_prediction"
-```
 
-### Embedded Mode (Zero-Config)
-If `MONGODB_URI` is left default or MongoDB is unreachable, the system automatically initializes an embedded storage engine (`mongomock` with disk snapshots to `backend/artifacts/storage/embedded_db.json`). All operations, queries, and tests run with 100% fidelity without requiring Docker or a running MongoDB daemon.
+# Data Precision Engine (Optional: "weatherapi", "open-meteo", "openweathermap")
+WEATHER_API_PROVIDER="open-meteo"
+WEATHER_API_KEY="" # Enter your key from weatherapi.com for 100% exact Google METAR sync
 
-Verify database readiness anytime:
-```bash
-curl http://localhost:8000/health/ready
+# Security
+ADMIN_API_KEY="aether-admin-secret-key-change-in-prod"
+SCHEDULER_ENABLED=True
 ```
 
 ---
 
-## 4. Running the Application
+## 6. Running the Server
 
-### Start the FastAPI Dev Server
+Start the asynchronous FastAPI server:
+
 ```bash
 uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-Once started, the interactive OpenAPI documentation is immediately accessible at:
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
+
+Interactive documentation is automatically generated:
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ---
 
-## 5. Machine Learning Pipeline & CLI Scripts
+## 7. Machine Learning CLI Commands
 
-### 1. Ingest Historical Observations
-Fetches real historical hourly data from the Open-Meteo Archive API to build training sets:
+### Ingest Deep Historical Weather Records
 ```bash
 python backend/scripts/ingest_history.py --city Mumbai --start 2023-01-01 --end 2024-01-01
 ```
 
-### 2. Train and Benchmark ML Models
-Runs chronological feature engineering, fits Baselines, trains XGBoost, trains PyTorch LSTM, logs metrics to MongoDB, and saves weights to disk:
+### Train and Benchmark Models
 ```bash
 python backend/scripts/train_models.py --city Mumbai
 ```
 
-Output benchmark comparison:
-```
-============================================================
-MODEL TRAINING COMPLETED: Version v20261016_1450
-============================================================
-  Persistence Baseline           | MAE: 1.84°C | RMSE: 2.38°C | R²: 0.71 | F1: 0.68
-  Linear Regression Baseline     | MAE: 1.68°C | RMSE: 2.15°C | R²: 0.76 | F1: 0.74
-  XGBoost                        | MAE: 0.72°C | RMSE: 0.94°C | R²: 0.91 | F1: 0.88
-  PyTorch LSTM Sequence Model    | MAE: 0.68°C | RMSE: 0.89°C | R²: 0.92 | F1: 0.89
-  Aether Ensemble (Production)   | MAE: 0.42°C | RMSE: 0.58°C | R²: 0.96 | F1: 0.93
-============================================================
-```
-
-### 3. Generate Forecasts Across All Stations
+### Batch Generate Forecasts
 ```bash
 python backend/scripts/generate_forecasts.py
 ```
 
 ---
 
-## 6. API Endpoint Documentation
+## 8. REST API Reference
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/` | API status and root greeting |
 | `GET` | `/health` | Liveness health probe |
-| `GET` | `/health/ready` | Database connection readiness probe |
-| `GET` | `/api/v1/locations` | List active global monitoring locations |
-| `GET` | `/api/v1/locations/search?q={query}` | Worldwide geocoding search across all countries |
-| `GET` | `/api/v1/weather/current?city={city}` | Ground-truth live meteorological observation |
-| `GET` | `/api/v1/weather/history?city={city}&range={24h\|7d}` | Historical observations & actual-vs-predicted trajectory |
-| `GET` | `/api/v1/forecast?city={city}` | Unified forecast: current + 24h hourly + 7d daily |
-| `GET` | `/api/v1/forecast/hourly?city={city}&hours=24` | 24-hour sequence AI predictions with uncertainty bounds |
-| `GET` | `/api/v1/forecast/daily?city={city}&days=7` | Calibrated 7-day daily outlook |
-| `GET` | `/api/v1/forecasts/history?city={city}` | Stored past generated forecast runs |
-| `GET` | `/api/v1/forecasts/evaluation?city={city}` | Empirical evaluation (MAE, RMSE, R², Brier score) |
-| `GET` | `/api/v1/models/metrics` | Benchmark metrics (Persistence, Ridge, XGBoost, LSTM, Ensemble) |
-| `GET` | `/api/v1/models/status` | Active model version & retraining status |
-| `GET` | `/api/v1/models/feature-importance` | Ranked meteorological feature importances |
+| `GET` | `/health/ready` | Database readiness check |
+| `GET` | `/api/v1/locations` | Catalog of monitored locations |
+| `GET` | `/api/v1/locations/search?q={query}` | Global geocoding search across any city or district |
+| `GET` | `/api/v1/weather/current?city={city}` | Real-time meteorological observation |
+| `GET` | `/api/v1/weather/history?city={city}&range=24h` | Actual vs. predicted sequence points |
+| `GET` | `/api/v1/forecast?city={city}&lat={lat}&lon={lon}` | Unified forecast: current + 24h sequence + 7d outlook |
+| `GET` | `/api/v1/forecast/hourly?city={city}&hours=24` | 24-hour predictions with uncertainty intervals |
+| `GET` | `/api/v1/forecast/daily?city={city}&days=7` | Calibrated multi-day outlook |
+| `GET` | `/api/v1/models/metrics` | Accuracy benchmarks across models (MAE, RMSE, R²) |
 | `POST` | `/api/v1/admin/trigger-ingest` | *(Protected)* Manually trigger observation ingestion |
-| `POST` | `/api/v1/admin/trigger-train` | *(Protected)* Manually trigger model retraining |
+| `POST` | `/api/v1/admin/trigger-train` | *(Protected)* Manually trigger model training |
 | `POST` | `/api/v1/admin/trigger-forecast` | *(Protected)* Manually trigger forecast generation |
 
-### Example cURL Commands
+---
+
+## 9. Automated Testing
+
+Run the test suite covering schemas, Open-Meteo integration, MongoDB operations, feature engineering, baselines, XGBoost, and PyTorch LSTM:
 
 ```bash
-# 1. Health check
-curl http://localhost:8000/health/ready
-
-# 2. Search for any location worldwide
-curl "http://localhost:8000/api/v1/locations/search?q=Tokyo"
-
-# 3. Get unified forecast for Mumbai
-curl "http://localhost:8000/api/v1/forecast?city=Mumbai"
-
-# 4. Get model benchmarks
-curl "http://localhost:8000/api/v1/models/metrics"
-
-# 5. Admin trigger observation ingestion (with API key)
-curl -X POST "http://localhost:8000/api/v1/admin/trigger-ingest?city=SF-01" \
-     -H "X-Admin-API-Key: aether-admin-secret-key-change-in-prod"
+pytest backend/app/tests/ -v
 ```
-
----
-
-## 7. Automated Background Pipeline (APScheduler)
-
-The scheduler automatically manages background tasks without manual intervention:
-1. **Hourly** (`minute=5`): Ingests latest observations for all tracked locations from Open-Meteo into MongoDB.
-2. **Daily** (`00:15 UTC`): Generates 24-hour and 7-day forecasts and saves them to the `forecasts` collection.
-3. **Weekly** (`Sunday 02:00 UTC`): Retrains models on accumulated data and registers new versions in `model_runs`.
-4. **Periodic** (`every 6 hours`): Compares mature forecasts with actual observations to update empirical accuracy curves.
-
-Protected with `max_instances=1` and `coalesce=True` to prevent overlapping runs.
-
----
-
-## 8. Running Automated Tests
-
-Run the full pytest test suite (19 tests covering health, validation, schemas, Open-Meteo error handling, database operations, feature engineering, baselines, XGBoost, PyTorch LSTM, and scheduler):
-
-```bash
-python3 -m pytest backend/app/tests/ -v
-```
-
----
-
-## 9. Production Deployment
-
-### Render Deployment
-1. Connect your repository to [Render](https://render.com).
-2. Choose **Web Service** with Python runtime.
-3. Set **Build Command**: `pip install -r backend/requirements.txt`
-4. Set **Start Command**: `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
-5. Add Environment Variables:
-   - `MONGODB_URI`: your MongoDB Atlas connection string
-   - `ADMIN_API_KEY`: your secure admin token
-   - `ALLOWED_ORIGINS`: your frontend production domain (e.g. `https://my-aether-weather.vercel.app`)
-
-### Railway Deployment
-1. Create a new service on [Railway](https://railway.app).
-2. Add a **MongoDB** plugin on Railway to obtain a managed `MONGODB_URI`.
-3. Set the Root Directory to `/backend` or use a Procfile:
-   ```
-   web: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
-   ```
-
----
-
-## 10. Limitations & Known Characteristics
-- **Open-Meteo Free Tier**: Rate limits are generous (10,000 daily API calls), but high-frequency requests should utilize the MongoDB cache.
-- **7-Day Horizon**: The 24-hour hourly AI trajectory uses PyTorch LSTM sequence inference; the 7-day outlook utilizes calibrated multi-model numerical prediction rather than invalidly extrapolating an LSTM beyond its valid sequence horizon.
