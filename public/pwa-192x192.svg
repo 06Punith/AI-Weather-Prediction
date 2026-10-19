@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="pwaSky" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1D3A"/>
+      <stop offset="60%" stop-color="#061224"/>
+      <stop offset="100%" stop-color="#020813"/>
+    </linearGradient>
+    <linearGradient id="pwaTemp" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="50%" stop-color="#FB923C"/>
+      <stop offset="100%" stop-color="#00E5FF"/>
+    </linearGradient>
+    <radialGradient id="pwaSun" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#F59E0B" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#pwaSky)"/>
+  <circle cx="96" cy="74" r="36" fill="url(#pwaSun)"/>
+  <circle cx="96" cy="74" r="18" fill="#F59E0B"/>
+  <!-- Uncertainty band -->
+  <path d="M 28 132 Q 68 96 100 110 T 164 100 L 164 126 Q 132 136 100 126 T 28 142 Z" fill="#00E5FF" fill-opacity="0.22"/>
+  <!-- Prediction curve -->
+  <path d="M 28 137 Q 68 106 100 118 T 164 113" fill="none" stroke="url(#pwaTemp)" stroke-width="8" stroke-linecap="round"/>
+  <!-- Scrub handle -->
+  <circle cx="100" cy="118" r="7" fill="#FFFFFF" stroke="#00E5FF" stroke-width="4"/>
+</svg>

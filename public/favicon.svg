@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1D3A"/>
+      <stop offset="100%" stop-color="#040D1B"/>
+    </linearGradient>
+    <linearGradient id="tempGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="50%" stop-color="#FB923C"/>
+      <stop offset="100%" stop-color="#00E5FF"/>
+    </linearGradient>
+    <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="100" height="100" rx="24" fill="url(#skyGrad)"/>
+  <circle cx="50" cy="40" r="18" fill="url(#sunGlow)"/>
+  <circle cx="50" cy="40" r="10" fill="#F59E0B"/>
+  <!-- Confidence wave curve -->
+  <path d="M 16 68 Q 36 50 52 58 T 84 52" fill="none" stroke="url(#tempGrad)" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- Uncertainty envelope -->
+  <path d="M 16 64 Q 36 44 52 52 T 84 44 L 84 60 Q 68 64 52 64 T 16 72 Z" fill="#00E5FF" fill-opacity="0.18"/>
+  <circle cx="52" cy="58" r="3.5" fill="#FFFFFF" stroke="#00E5FF" stroke-width="2"/>
+</svg>
