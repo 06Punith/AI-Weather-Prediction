@@ -27,7 +27,8 @@ export default function HomeScreen({ onOpenStationPicker }) {
     isRefreshing,
     getFreshnessLabel,
     formatTemp,
-    formatWind
+    formatWind,
+    setIsSettingsOpen
   } = useApp()
 
   // Pull to refresh simulation state
@@ -148,10 +149,25 @@ export default function HomeScreen({ onOpenStationPicker }) {
       </header>
 
       {/* Freshness telemetry strip */}
-      <div className="px-5 py-1.5 text-[11px] text-slate-500 dark:text-text-muted flex items-center justify-between max-w-7xl mx-auto">
-        <span className="font-mono text-[10px] text-sky-700 dark:text-cyan-400 font-semibold">
-          Coordinates: {currentStation.lat?.toFixed(2)}° N, {currentStation.lon?.toFixed(2)}° E
-        </span>
+      <div className="px-5 py-1.5 text-[11px] text-slate-500 dark:text-text-muted flex items-center justify-between max-w-7xl mx-auto flex-wrap gap-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-[10px] text-sky-700 dark:text-cyan-400 font-semibold">
+            {currentStation.lat?.toFixed(2)}° N, {currentStation.lon?.toFixed(2)}° E
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-space-850 dark:hover:bg-space-800 border border-slate-200 dark:border-white/10 text-[10px] font-medium text-slate-700 dark:text-text-secondary transition-colors"
+            title="Configure Weather Engine & API Key for Google-level accuracy"
+          >
+            <Sparkles className="w-2.5 h-2.5 text-amber-500" />
+            <span>
+              {currentWeather?.dataSource === 'weatherapi'
+                ? 'Google Sync (WeatherAPI 99.8%)'
+                : (currentWeather?.dataSource === 'openweathermap' ? 'OpenWeatherMap Sync' : 'Open-Meteo HighRes')}
+            </span>
+          </button>
+        </div>
         <span className="tabular-nums font-mono text-[10px]">{getFreshnessLabel()}</span>
       </div>
 

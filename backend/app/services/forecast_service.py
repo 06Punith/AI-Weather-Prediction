@@ -103,8 +103,15 @@ class ForecastService:
         d_wind = daily_raw.get("wind_speed_10m_max", [])
         d_codes = daily_raw.get("weather_code", [])
 
+        # Align daily items to today onwards (skipping past_days prepended by API)
+        today_str = now_utc.strftime("%Y-%m-%d")
+        start_day_idx = 0
+        if today_str in d_times:
+            start_day_idx = d_times.index(today_str)
+
         daily_items = []
-        for i in range(min(7, len(d_times))):
+        for offset in range(min(7, len(d_times) - start_day_idx)):
+            i = start_day_idx + offset
             date_str = d_times[i]
             dt = datetime.strptime(date_str, "%Y-%m-%d")
             day_name = dt.strftime("%a")  # Mon, Tue, etc.

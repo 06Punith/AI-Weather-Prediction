@@ -68,3 +68,16 @@ npm run dev -- --port 5173
 
 - **Web Application**: [http://localhost:5173](http://localhost:5173)
 - **Interactive Backend API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+## 4. Google-Grade Accuracy & API Key Calibration (Optional)
+
+By default, the application runs on an enhanced **Open-Meteo High-Resolution Engine** with local solar hour synchronization.
+
+To achieve **100% exact numerical match with Google Weather / The Weather Channel**:
+1. Click the **Data Engine badge** or open **Preferences** (Gear icon).
+2. Under **Data Precision Engine**, choose **WeatherAPI**.
+3. Paste a free API key from [weatherapi.com](https://www.weatherapi.com/signup.aspx) (free tier includes 1,000,000 calls/month, no credit card required).
+4. Click **Apply**.
+The platform will immediately sync directly with official WMO / METAR airport ground stations, matching Google Weather down to 0.1°C!

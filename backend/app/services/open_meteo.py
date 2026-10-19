@@ -130,7 +130,7 @@ class OpenMeteoService:
                 "precipitation_probability_max",
                 "wind_speed_10m_max",
             ],
-            "timezone": "UTC",
+            "timezone": "auto",
             "past_days": past_days,
         }
 

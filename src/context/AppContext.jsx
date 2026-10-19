@@ -45,6 +45,8 @@ export function AppProvider({ children }) {
   const [tempUnit, setTempUnit] = useState(() => localStorage.getItem('aether_temp_unit') || 'C')
   const [windUnit, setWindUnit] = useState(() => localStorage.getItem('aether_wind_unit') || 'kmh')
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('aether_theme') || 'dark')
+  const [weatherApiKey, setWeatherApiKey] = useState(() => localStorage.getItem('aether_weather_api_key') || '')
+  const [weatherProvider, setWeatherProvider] = useState(() => localStorage.getItem('aether_weather_provider') || (localStorage.getItem('aether_weather_api_key') ? 'weatherapi' : 'open-meteo'))
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   // Sync theme to DOM
@@ -214,6 +216,21 @@ export function AppProvider({ children }) {
     return `Updated ${elapsedMinutes}m ago`
   }, [lastRefreshedAt])
 
+  // Update and persist weather API key & provider
+  const updateWeatherConfig = useCallback(async (newProvider, newKey) => {
+    const cleanKey = (newKey || '').trim()
+    const prov = newProvider || (cleanKey ? 'weatherapi' : 'open-meteo')
+    
+    setWeatherApiKey(cleanKey)
+    setWeatherProvider(prov)
+    
+    localStorage.setItem('aether_weather_api_key', cleanKey)
+    localStorage.setItem('aether_weather_provider', prov)
+    
+    // Immediately reload telemetry with new provider
+    await loadLocationData(currentLocation, true)
+  }, [currentLocation, loadLocationData])
+
   const value = {
     activeTab,
     setActiveTab,
@@ -246,6 +263,9 @@ export function AppProvider({ children }) {
     setWindUnit,
     themeMode,
     setThemeMode,
+    weatherApiKey,
+    weatherProvider,
+    updateWeatherConfig,
     isSettingsOpen,
     setIsSettingsOpen,
     formatTemp,

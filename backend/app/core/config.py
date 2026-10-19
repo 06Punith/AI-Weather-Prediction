@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     OPEN_METEO_GEOCODING_URL: str = "https://geocoding-api.open-meteo.com/v1/search"
     OPEN_METEO_TIMEOUT_SECONDS: float = 15.0
 
+    # Weather Provider & High-Accuracy API Key (e.g. WeatherAPI for Google 1:1 sync)
+    WEATHER_API_PROVIDER: str = "open-meteo"
+    WEATHER_API_KEY: str = ""
+
     # Background Tasks
     SCHEDULER_ENABLED: bool = True
 
